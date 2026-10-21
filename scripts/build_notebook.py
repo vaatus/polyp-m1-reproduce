@@ -41,8 +41,11 @@ if USE_DRIVE:
     WORK = "/content/drive/MyDrive/polyp-m1"
 else:
     WORK = "/content/work"
+# data and prediction maps stay on local disk: unzipping or writing thousands of small
+# files on the Drive mount is slow and can stop half-way
+DATA, MAPS = "/content/data", "/content/maps"
 os.makedirs(WORK, exist_ok=True)
-os.environ["WORK"] = WORK
+os.environ.update(WORK=WORK, DATA=DATA, MAPS=MAPS)
 print(WORK)
 """)
 
@@ -65,7 +68,7 @@ Download data and trained models (Google Drive links from the two READMEs).
 Expected test-set sizes: CVC-300 60, CVC-ClinicDB 62, Kvasir 100, CVC-ColonDB 380, ETIS 196.
 """)
 code("""
-!bash /content/m1/scripts/download.sh $WORK
+!bash /content/m1/scripts/download.sh $WORK $DATA
 """)
 
 md("""
@@ -83,11 +86,11 @@ code("""
 %%bash
 set -e
 mkdir -p /content/PraNet/data /content/PraNet/snapshots/PraNet_Res2Net
-ln -sfn $WORK/data/TestDataset /content/PraNet/data/TestDataset
+ln -sfn $DATA/TestDataset /content/PraNet/data/TestDataset
 ln -sf  $WORK/weights/PraNet-19.pth /content/PraNet/snapshots/PraNet_Res2Net/PraNet-19.pth
 
 mkdir -p /content/Polyp-PVT/dataset /content/Polyp-PVT/model_pth /content/Polyp-PVT/pretrained_pth
-ln -sfn $WORK/data/TestDataset /content/Polyp-PVT/dataset/TestDataset
+ln -sfn $DATA/TestDataset /content/Polyp-PVT/dataset/TestDataset
 ln -sf  $WORK/weights/PolypPVT.pth  /content/Polyp-PVT/model_pth/PolypPVT.pth
 ln -sf  $WORK/weights/pvt_v2_b2.pth /content/Polyp-PVT/pretrained_pth/pvt_v2_b2.pth
 ls -l /content/PraNet/snapshots/PraNet_Res2Net /content/Polyp-PVT/model_pth /content/Polyp-PVT/pretrained_pth
@@ -101,7 +104,6 @@ code("""
 
 code("""
 %%bash
-MAPS=$WORK/maps
 mkdir -p $MAPS
 rm -rf $MAPS/PraNet $MAPS/Polyp-PVT
 cp -r /content/PraNet/results/PraNet $MAPS/PraNet
@@ -120,8 +122,8 @@ Evaluate with pysodmetrics. `meanDice`/`meanIoU` are the paper metrics
 code("""
 %cd /content/m1
 !mkdir -p results
-!python src/evaluate.py --model PraNet    --pred_root $WORK/maps/PraNet    --gt_root $WORK/data/TestDataset --out results
-!python src/evaluate.py --model Polyp-PVT --pred_root $WORK/maps/Polyp-PVT --gt_root $WORK/data/TestDataset --out results
+!python src/evaluate.py --model PraNet    --pred_root $MAPS/PraNet    --gt_root $DATA/TestDataset --out results
+!python src/evaluate.py --model Polyp-PVT --pred_root $MAPS/Polyp-PVT --gt_root $DATA/TestDataset --out results
 """)
 
 md("""
@@ -133,10 +135,11 @@ code("""
 cd $WORK/downloads
 [ -f pranet_maps.zip ] || gdown -q 1CJ6CTUdenumgiKXieuKXFohefRJwyFPY -O pranet_maps.zip
 [ -f pvt_maps.zip ]    || gdown -q 1L0pFFmd9fbqnJnBwrM9cEV5nlRS32mbQ -O pvt_maps.zip
-mkdir -p $WORK/authors_maps && unzip -q -o pranet_maps.zip -d $WORK/authors_maps && unzip -q -o pvt_maps.zip -d $WORK/authors_maps
+rm -rf /content/authors_maps && mkdir -p /content/authors_maps
+unzip -q -o pranet_maps.zip -d /content/authors_maps && unzip -q -o pvt_maps.zip -d /content/authors_maps
 cd /content/m1 && mkdir -p results/authors_maps_check
-python src/evaluate.py --model PraNet    --pred_root $WORK/authors_maps/PraNet --gt_root $WORK/data/TestDataset --out results/authors_maps_check
-python src/evaluate.py --model Polyp-PVT --pred_root $WORK/authors_maps/result_map/PolypPVT --gt_root $WORK/data/TestDataset --out results/authors_maps_check
+python src/evaluate.py --model PraNet    --pred_root /content/authors_maps/PraNet --gt_root $DATA/TestDataset --out results/authors_maps_check
+python src/evaluate.py --model Polyp-PVT --pred_root /content/authors_maps/result_map/PolypPVT --gt_root $DATA/TestDataset --out results/authors_maps_check
 """)
 
 md("Compare our maps with the paper tables.")
@@ -169,7 +172,7 @@ pi = pd.read_csv("results/PraNet_per_image.csv").merge(
     pd.read_csv("results/Polyp-PVT_per_image.csv"), on=["dataset", "image"], suffixes=("_pranet", "_pvt"))
 pi["gap"] = pi["dice_mean_thr_pvt"] - pi["dice_mean_thr_pranet"]
 rows = pi.loc[pi.groupby("dataset")["gap"].apply(lambda s: s.abs().idxmax())]
-D = f"{WORK}/data/TestDataset"
+D = f"{DATA}/TestDataset"
 fig, ax = plt.subplots(len(rows), 4, figsize=(12, 3 * len(rows)))
 for r, (_, row) in enumerate(rows.iterrows()):
     stem = os.path.splitext(row.image)[0]
@@ -177,8 +180,8 @@ for r, (_, row) in enumerate(rows.iterrows()):
     gt_path = next(p for p in os.listdir(f"{D}/{row.dataset}/masks") if os.path.splitext(p)[0] == stem)
     ims = [cv2.imread(f"{D}/{row.dataset}/images/{img_path}")[:, :, ::-1],
            cv2.imread(f"{D}/{row.dataset}/masks/{gt_path}", 0),
-           cv2.imread(f"{WORK}/maps/PraNet/{row.dataset}/{row.image}", 0),
-           cv2.imread(f"{WORK}/maps/Polyp-PVT/{row.dataset}/{row.image}", 0)]
+           cv2.imread(f"{MAPS}/PraNet/{row.dataset}/{row.image}", 0),
+           cv2.imread(f"{MAPS}/Polyp-PVT/{row.dataset}/{row.image}", 0)]
     titles = [f"{row.dataset}/{row.image}", "GT",
               f"PraNet Dice {row.dice_mean_thr_pranet:.2f}", f"Polyp-PVT Dice {row.dice_mean_thr_pvt:.2f}"]
     for c in range(4):
@@ -186,9 +189,9 @@ for r, (_, row) in enumerate(rows.iterrows()):
 plt.tight_layout(); plt.savefig("figures/largest_disagreements.png", dpi=150); plt.show()
 """)
 
-md("Save results and figures next to the data (Drive) so they survive the session.")
+md("Save results, figures and our prediction maps to `WORK` (Drive) so they survive the session.")
 code("""
-!mkdir -p $WORK/m1_out && cp -r results figures $WORK/m1_out/ && ls -R $WORK/m1_out
+!mkdir -p $WORK/m1_out && cp -r results figures $MAPS $WORK/m1_out/ && ls $WORK/m1_out $WORK/m1_out/results
 """)
 
 nb = {

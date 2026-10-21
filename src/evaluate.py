@@ -34,9 +34,14 @@ def evaluate_dataset(pred_dir, gt_dir):
     })
     gts = {p.stem: p for p in Path(gt_dir).iterdir() if p.suffix.lower() in {".png", ".jpg", ".tif", ".bmp"}}
     preds = sorted(p for p in Path(pred_dir).iterdir() if p.suffix.lower() == ".png")
+    if not gts:
+        raise FileNotFoundError(f"{gt_dir}: no ground-truth masks")
     missing = sorted(set(gts) - {p.stem for p in preds})
     if missing:
         raise FileNotFoundError(f"{pred_dir}: {len(missing)} predictions missing, e.g. {missing[:3]}")
+    extra = sorted({p.stem for p in preds} - set(gts))
+    if extra:
+        raise FileNotFoundError(f"{gt_dir}: {len(extra)} masks missing, e.g. {extra[:3]}")
 
     names = []
     for p in preds:
