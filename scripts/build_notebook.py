@@ -128,7 +128,7 @@ code("""
 
 md("""
 Evaluator check: score the authors' own published prediction maps (README links) with the same code.
-This should give the paper numbers exactly; `results/authors_maps/` holds the expected output.
+This should give the paper numbers exactly; `results/authors_maps_check/` holds the expected output.
 """)
 code("""
 %%bash

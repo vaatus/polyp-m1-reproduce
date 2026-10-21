@@ -40,15 +40,47 @@ meanDic / meanIoU from the papers (`src/compare.py` holds the sources):
 
 ## Reproduced results
 
-_Fill in from `results/comparison.md` after the Colab run._
+Colab, Tesla T4, torch 2.11, official test scripts at test size 352. Mean Dice / mean IoU, paper value
+in brackets (full table: `results/comparison.md`):
 
-## Evaluator check (done locally, no GPU needed)
+| Dataset (n) | PraNet | Polyp-PVT |
+|---|---|---|
+| Kvasir (100) | **0.894** (0.898) / **0.836** (0.840) | 0.917 (0.917) / 0.864 (0.864) |
+| CVC-ClinicDB (62) | 0.899 (0.899) / 0.849 (0.849) | 0.937 (0.937) / 0.889 (0.889) |
+| CVC-ColonDB (380) | 0.712 (0.709 ¹) / 0.640 (0.640) | **0.808** (0.808) / 0.727 (0.727) |
+| ETIS-LaribPolypDB (196) | 0.628 (0.628) / 0.567 (0.567) | 0.787 (0.787) / 0.706 (0.706) |
+| CVC-300 (60) | 0.871 (0.871) / 0.797 (0.797) | 0.900 (0.900) / 0.833 (0.833) |
+
+![reproduced vs paper](figures/reproduced_vs_paper.png)
+
+Polyp-PVT reproduces exactly on all five sets, including the 0.808 target on CVC-ColonDB. Polyp-PVT
+beats PraNet on every set, most on the unseen ones: +0.096 Dice on CVC-ColonDB and +0.159 on ETIS.
+
+PraNet reproduces exactly on four sets. On Kvasir we get 0.894 instead of 0.898:
+
+- Our maps and the authors' published PraNet maps score the same on CVC-300, ClinicDB, ColonDB and
+  ETIS image by image (per-image Dice difference < 0.0001).
+- On Kvasir, 92 of 100 images agree; 8 differ by more than 0.01 Dice, two of them by 0.13 and 0.16
+  (`cju2mh8t6p07008350e01tx2a`, `cju1amqw6p8pw0993d9gc5crl`).
+- The test images and masks are pixel-identical to the original Kvasir-SEG release, re-running PraNet
+  on CPU gives the same 0.894 as the T4, and feeding the original JPEGs instead of the PNGs also gives
+  0.894. The differing images have no common size.
+
+So the gap is not from the data, the metric or our hardware. Our best explanation is that the authors'
+published Kvasir maps were produced with a slightly different checkpoint or software setup than the
+released `PraNet-19.pth`; we could not confirm this.
+
+## Evaluator check
 
 Scoring the authors' published prediction maps (PraNet README §3.3, Polyp-PVT README §4.8) with
 `src/evaluate.py` reproduces all ten paper values to three decimals
-(`results/authors_maps/comparison.md`). The one difference is PraNet on CVC-ColonDB: 0.712, which is
+(`results/authors_maps_check/`). The one difference is PraNet on CVC-ColonDB: 0.712, which is
 what the Polyp-PVT paper reports; the PraNet paper says 0.709. So any gap between our maps and the
 papers comes from inference, not from the metric.
+
+**Single-threshold Dice.** `Dice@0.5` (one 0.5 threshold) is 0.003 to 0.009 higher than the papers'
+mean Dice on every set and model. A hand-written 0.5-threshold metric therefore looks like a slight
+improvement over the paper when it is not.
 
 ## Notes on method
 
